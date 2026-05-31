@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Deltaforce Mobile Highlighter</title>
+    <style>
+        body { background-color: #121212; color: #E0E0E0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 15px; }
+        .card { background: #1E1E1E; padding: 20px; border-radius: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.6); max-width: 500px; margin: 10px auto; text-align: center; }
+        h1 { color: #00E676; font-size: 24px; margin-bottom: 5px; }
+        .status { margin: 15px 0; padding: 12px; background: #2A2A2A; border-radius: 8px; color: #00E5FF; font-size: 14px; font-weight: bold; word-break: break-all; }
+        .btn { background: #00E676; color: #121212; border: none; padding: 14px; font-size: 16px; font-weight: bold; border-radius: 10px; cursor: pointer; width: 100%; margin-top: 10px; transition: 0.2s; }
+        .btn:active { transform: scale(0.98); background: #00C853; }
+        .list-box { text-align: left; margin-top: 20px; }
+        .item { background: #252525; padding: 15px; margin-bottom: 10px; border-radius: 8px; border-left: 4px solid #00E5FF; display: flex; justify-content: space-between; align-items: center; }
+        .dl-btn { background: #FFD700; color: #121212; padding: 6px 12px; font-size: 12px; font-weight: bold; border-radius: 6px; text-decoration: none; }
+    </style>
+</head>
+<body>
+
+<div class="card">
+    <h1>DELTA FORCE AI HIGHLIGHT</h1>
+    <p style="color: #777; font-size: 11px; margin: 0;">MOBILE CLOUD SYSTEM</p>
+    
+    <div id="status" class="status">📱 영상을 업로드해 주세요.</div>
+
+    <input type="file" id="videoFile" accept="video/mp4" style="display: none;" onchange="fileSelected()">
+    <button class="btn" style="background: #00E5FF;" onclick="document.getElementById('videoFile').click()">📂 1. 핸드폰에서 영상 선택</button>
+    
+    <button class="btn" id="runBtn" onclick="uploadAndAnalyze()" disabled>⚡ 2. 서버 전송 및 AI 분석 시작</button>
+
+    <div class="list-box">
+        <h3 style="color: #00E676; border-bottom: 1px solid #333; padding-bottom: 8px;">🎬 추출된 하이라이트 다운로드</h3>
+        <div id="resultList"><p style="color: #555; text-align: center;">분석이 완료되면 다운로드 링크가 뜹니다.</p></div>
+    </div>
+</div>
+
+<script>
+let targetFile = null;
+
+function fileSelected() {
+    const input = document.getElementById('videoFile');
+    if(input.files.length > 0) {
+        targetFile = input.files[0];
+        document.getElementById('status').innerText = `📄 선택됨: ${targetFile.name}`;
+        document.getElementById('runBtn').disabled = false;
+    }
+}
+
+async function uploadAndAnalyze() {
+    const status = document.getElementById('status');
+    const resultList = document.getElementById('resultList');
+    if(!targetFile) return;
+
+    // 1단계: 서버로 영상 대용량 업로드
+    status.innerText = "⏳ 1/2 서버로 초고속 영상 업로드 중...";
+    status.style.color = "#FFD700";
+    
+    try {
+        const uploadRes = await fetch('/upload', {
+            method: 'POST',
+            headers: { 'X-File-Name': encodeURIComponent(targetFile.name), 'Content-Type': 'application/octet-stream' },
+            body: targetFile
+        });
+        const uploadData = await uploadRes.json();
+
+        if(uploadData.status !== "success") {
+            status.innerText = "❌ 업로드 실패"; return;
+        }
+
+        // 2단계: 파이썬 AI 매칭 및 컷팅 가동
+        status.innerText = "🔍 2/2 AI가 킬마크 스캔 및 컷팅 중...";
+        const analyzeRes = await fetch(`/analyze?file=${encodeURIComponent(uploadData.filename)}`);
+        const analyzeData = await analyzeRes.json();
+
+        if(analyzeData.status === "success") {
+            status.innerText = `✅ 완료! 하이라이트 ${analyzeData.highlights.length}개 추출!`;
+            status.style.color = "#00E676";
+            
+            resultList.innerHTML = "";
+            if(analyzeData.highlights.length === 0) {
+                resultList.innerHTML = "<p style='color:#666;'>검출된 킬마크가 없습니다.</p>";
+                return;
+            }
+
+            analyzeData.highlights.forEach(item => {
+                const div = document.createElement('div');
+                div.className = 'item';
+                div.innerHTML = `
+                    <div>
+                        <span style="font-weight:bold; color:#FFF;">${item.description}</span><br>
+                        <span style="font-size:12px; color:#888;">⏱️ 시작점: ${item.timestamp}</span>
+                    </div>
+                    <a class="dl-btn" href="${item.download_url}">다운로드</a>
+                `;
+                resultList.appendChild(div);
+            });
+        } else {
+            status.innerText = `❌ 에러: ${analyzeData.message}`;
+        }
+    } catch (e) {
+        status.innerText = "❌ 서버 통신 오류 발생";
+        status.style.color = "#FF5252";
+    }
+}
+</script>
+
+</body>
+</html>
